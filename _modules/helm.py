@@ -90,7 +90,7 @@ def _get_release_namespace(name, tiller_namespace="kube-system", **kwargs):
   if not result or len(result.split("\n")) < 2:
     return None
 
-  return result.split("\n")[1].split("\t")[5]
+  return result.split("\n")[1].split("\t")[-1]
 
 def list_repos(**kwargs):
   '''
