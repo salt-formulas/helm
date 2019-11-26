@@ -201,7 +201,7 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
     "failed": []
   }
 
-  for name, url in present.iteritems():
+  for name, url in present.items():
     if not name or not url:
       raise CommandExecutionError(('Supplied repo to add must have a name (%s) '
                                    'and url (%s)' % (name, url)))
@@ -217,7 +217,7 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
         'stdout': add_repo(name, url, **kwargs)['stdout']
       })
       existing_repos = {
-        n: u for (n, u) in existing_repos.iteritems() if name != n
+        n: u for (n, u) in existing_repos.items() if name != n
       }
     except CommandExecutionError as e:
       result['failed'].append({
@@ -231,7 +231,7 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
   # Handle removal of repositories configured to be absent (or not configured
   # to be present if the `exclusive` flag is set)
   #
-  existing_names = [name for (name, url) in existing_repos.iteritems()]
+  existing_names = [name for (name, url) in existing_repos.items()]
   if exclusive:
     present['stable'] = "exclude"
     absent = [name for name in existing_names if not name in present]

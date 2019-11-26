@@ -5,35 +5,35 @@ from salt.exceptions import CommandExecutionError
 def managed(name, present={}, absent=[], exclusive=False, helm_home=None):
   '''
   Ensure the supplied repositories are available to the helm client. If the
-  `exclusive` flag is set to a truthy value, any extra repositories in the 
+  `exclusive` flag is set to a truthy value, any extra repositories in the
   helm client will be removed.
 
   name
       The name of the state
 
   present
-      A dict of repository names to urls to ensure are registered with the 
+      A dict of repository names to urls to ensure are registered with the
       Helm client
-  
+
   absent
       A list of repository names to ensure are unregistered from the Helm client
-  
+
   exclusive
-      A boolean flag indicating whether the state should ensure only the 
+      A boolean flag indicating whether the state should ensure only the
       supplied repositories are availabe to the target minion.
 
   helm_home
-      An optional path to the Helm home directory 
+      An optional path to the Helm home directory
   '''
   ret = {'name': name,
          'changes': {},
          'result': True,
          'comment': ''}
-  
+
   try:
     result = __salt__['helm.manage_repos'](
-      present=present, 
-      absent=absent, 
+      present=present,
+      absent=absent,
       exclusive=exclusive,
       helm_home=helm_home
     )
@@ -50,7 +50,7 @@ def managed(name, present={}, absent=[], exclusive=False, helm_home=None):
       return ret
 
     ret['comment'] = ("Repositories were in the desired state: "
-                     "%s" % [name for (name, url) in present.iteritems()])
+                     "%s" % [name for (name, url) in present.items()])
     return ret
   except CommandExecutionError as e:
     ret['result'] = False
@@ -59,24 +59,24 @@ def managed(name, present={}, absent=[], exclusive=False, helm_home=None):
 
 def updated(name, helm_home=None):
   '''
-  Ensure the local Helm repository cache is up to date with each of the 
-  helm client's configured remote chart repositories. Because the `helm repo 
-  update` command doesn't indicate whether any changes were made to the local 
+  Ensure the local Helm repository cache is up to date with each of the
+  helm client's configured remote chart repositories. Because the `helm repo
+  update` command doesn't indicate whether any changes were made to the local
   cache, this will only indicate change if the Helm client failed to retrieve
-  an update from one or more of the repositories, regardless of whether an 
+  an update from one or more of the repositories, regardless of whether an
   update was made to the local Helm chart repository cache.
 
   name
       The name of the state
 
   helm_home
-      An optional path to the Helm home directory 
+      An optional path to the Helm home directory
   '''
   ret = {'name': name,
          'changes': {},
          'result': True,
          'comment': 'Successfully synced repositories: ' }
-  
+
 
   try:
     result = __salt__['helm.update_repos'](helm_home=helm_home)
@@ -86,7 +86,7 @@ def updated(name, helm_home=None):
       r'Successfully got an update from the \"([^\"]+)\"', result['stdout'])
     failed_repos = re.findall(
       r'Unable to get an update from the \"([^\"]+)\"', result['stdout'])
-    
+
     if failed_repos and len(failed_repos) > 0:
       ret['result'] = False
       ret['changes']['succeeded'] = success_repos
@@ -94,11 +94,11 @@ def updated(name, helm_home=None):
       ret['comment'] = 'Failed to sync against some repositories' + cmd_str
     else:
       ret['comment'] += "%s" % success_repos + cmd_str
-    
+
   except CommandExecutionError as e:
     ret['name'] = e.cmd
     ret['result'] = False
-    ret['comment'] = ("Failed to update repos: %s" % e.error + 
+    ret['comment'] = ("Failed to update repos: %s" % e.error +
                       "\nExecuted command: %s" % e.cmd)
     return ret
 
