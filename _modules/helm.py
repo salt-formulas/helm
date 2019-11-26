@@ -57,7 +57,7 @@ def _parse_release(output):
   if chart_match:
     result['chart'] = chart_match.group(1)
     result['version'] = chart_match.group(2)
-  
+
   user_values_match = re.search(r"(?<=USER-SUPPLIED VALUES\:\n)(\n*.+)+?(?=\n*COMPUTED VALUES\:)", output, re.MULTILINE)
   if user_values_match:
     result['values'] = yaml.deserialize(user_values_match.group(0))
@@ -82,15 +82,18 @@ def _parse_repo(repo_string = None):
     "name": split_string[0].strip(),
     "url": split_string[1].strip()
   }
-  
 
 def _get_release_namespace(name, tiller_namespace="kube-system", **kwargs):
-  cmd = _helm_cmd("list", name, **kwargs)
+  cmd = _helm_cmd("list", name, "--output", "yaml", **kwargs)
   result = __salt__['cmd.run_stdout'](**cmd)
   if not result or len(result.split("\n")) < 2:
     return None
 
-  return result.split("\n")[1].split("\t")[5]
+  releases = yaml.deserialize(result)
+  if len(releases["Releases"]) == 0:
+    return None
+
+  return releases["Releases"][0]["Namespace"]
 
 def list_repos(**kwargs):
   '''
@@ -107,13 +110,13 @@ def list_repos(**kwargs):
 
   result = result.split("\n")
   result.pop(0)
-  return { 
+  return {
     repo['name']: repo['url'] for repo in [_parse_repo(line) for line in result]
   }
 
 def add_repo(name, url, **kwargs):
   '''
-  Register the repository located at the supplied url with the supplied name. 
+  Register the repository located at the supplied url with the supplied name.
   Note that re-using an existing name will overwrite the repository url for
   that registered repository to point to the supplied url.
 
@@ -137,10 +140,10 @@ def remove_repo(name, **kwargs):
 
 def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
   '''
-  Manage the repositories registered with the Helm client's local cache. 
+  Manage the repositories registered with the Helm client's local cache.
 
   *ensuring repositories are present*
-  Repositories that should be present in the helm client can be supplied via 
+  Repositories that should be present in the helm client can be supplied via
   the `present` dict parameter; each key in the dict is a release name, and the
   value is the repository url that should be registered.
 
@@ -151,18 +154,18 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
 
   This function returns a dict with the following keys:
 
-    * already_present: a listing of supplied repository definitions to add that 
+    * already_present: a listing of supplied repository definitions to add that
       are already registered with the Helm client
 
-    * added: a list of repositories that are newly registered with the Helm 
+    * added: a list of repositories that are newly registered with the Helm
       client. Each item in the list is a dict with the following keys:
         * name: the repo name
         * url: the repo url
         * stdout: the output from the `helm repo add` command call for the repo
-    
-    * already_absent: any repository name supplied via the `absent` parameter 
+
+    * already_absent: any repository name supplied via the `absent` parameter
       that was already not registered with the Helm client
-    
+
     * removed: the result of attempting to remove any repositories
 
     * failed: a list of repositores that were unable to be added. Each item in
@@ -170,11 +173,11 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
         * type: the text "removal" or "addition", as appropriate
         * name: the repo name
         * url: the repo url (if appropriate)
-        * error: the output from add or remove command attempted for the 
+        * error: the output from add or remove command attempted for the
           repository
 
   present
-      The dict of repositories that should be registered with the Helm client. 
+      The dict of repositories that should be registered with the Helm client.
       Each dict key is the name with which the repository url (the corresponding
       value) should be registered with the Helm client.
 
@@ -183,10 +186,10 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
       Each entry in the list must be the (string) name of the repository.
 
   exclusive
-      A flag indicating whether only the supplied repos should be available in 
-      the target minion's Helm client. If configured to true, the `absent` 
-      parameter will be ignored and only the repositories configured via the 
-      `present` parameter will be registered with the Helm client. Defaults to 
+      A flag indicating whether only the supplied repos should be available in
+      the target minion's Helm client. If configured to true, the `absent`
+      parameter will be ignored and only the repositories configured via the
+      `present` parameter will be registered with the Helm client. Defaults to
       False.
   '''
   existing_repos = list_repos(**kwargs)
@@ -198,73 +201,73 @@ def manage_repos(present={}, absent=[], exclusive=False, **kwargs):
     "failed": []
   }
 
-  for name, url in present.iteritems():
+  for name, url in present.items():
     if not name or not url:
       raise CommandExecutionError(('Supplied repo to add must have a name (%s) '
                                    'and url (%s)' % (name, url)))
-    
+
     if name in existing_repos and existing_repos[name] == url:
       result['already_present'].append({ "name": name, "url": url })
       continue
 
     try:
-      result['added'].append({ 
-        'name': name, 
-        'url': url, 
+      result['added'].append({
+        'name': name,
+        'url': url,
         'stdout': add_repo(name, url, **kwargs)['stdout']
       })
       existing_repos = {
-        n: u for (n, u) in existing_repos.iteritems() if name != n
+        n: u for (n, u) in existing_repos.items() if name != n
       }
     except CommandExecutionError as e:
-      result['failed'].append({ 
-        "type": "addition", 
-        "name": name, 
-        'url': url, 
+      result['failed'].append({
+        "type": "addition",
+        "name": name,
+        'url': url,
         'error': '%s' % e
-      })  
-  
+      })
+
   #
   # Handle removal of repositories configured to be absent (or not configured
   # to be present if the `exclusive` flag is set)
   #
-  existing_names = [name for (name, url) in existing_repos.iteritems()]
+  existing_names = [name for (name, url) in existing_repos.items()]
   if exclusive:
     present['stable'] = "exclude"
     absent = [name for name in existing_names if not name in present]
-  
+
   for name in absent:
     if not name or not isinstance(name, str):
       raise CommandExecutionError(('Supplied repo name to be absent must be a '
                                    'string: %s' % name))
-    
+
     if name not in existing_names:
       result['already_absent'].append(name)
       continue
 
     try:
-      result['removed'].append({ 
-        'name': name, 
+      result['removed'].append({
+        'name': name,
         'stdout': remove_repo(name, **kwargs) ['stdout']
       })
     except CommandExecutionError as e:
-      result['failed'].append({ 
-        "type": "removal", "name": name, "error": '%s' % e 
+      result['failed'].append({
+        "type": "removal", "name": name, "error": '%s' % e
       })
 
   return result
 
 def update_repos(**kwargs):
   '''
-  Ensures the local helm repository cache for each repository is up to date. 
+  Ensures the local helm repository cache for each repository is up to date.
   Proxies the `helm repo update` command.
   '''
   return _cmd_and_result('repo', 'update', **kwargs)
 
 def get_release(name, tiller_namespace="kube-system", **kwargs):
   '''
-  Get the parsed release metadata from calling `helm get {{ release }}` for the 
-  supplied release name, or None if no release is found. The following keys may 
+  Get the parsed release metadata from calling `helm get {{ release }}` for the
+  supplied release name, or None if no release is found. The following keys may
   or may not be in the returned dict:
 
     * chart
@@ -283,7 +286,7 @@ def get_release(name, tiller_namespace="kube-system", **kwargs):
   release = _parse_release(result)
 
   #
-  # `helm get {{ release }}` doesn't currently (2.6.2) return the namespace, so 
+  # `helm get {{ release }}` doesn't currently (2.6.2) return the namespace, so
   # separately retrieve it if it's not available
   #
   if not 'namespace' in release:
@@ -301,12 +304,12 @@ def release_create(name, chart_name, namespace='default',
                    version=None, values_file=None,
                    tiller_namespace='kube-system', **kwargs):
     '''
-    Install a release. There must not be a release with the supplied name 
+    Install a release. There must not be a release with the supplied name
     already installed to the Kubernetes cluster.
 
     Note that if a release already exists with the specified name, you'll need
     to use the release_upgrade function instead; unless the release is in a
-    different namespace, in which case you'll need to delete and purge the 
+    different namespace, in which case you'll need to delete and purge the
     existing release (using release_delete) and *then* use this function to
     install a new release to the desired namespace.
     '''
@@ -317,8 +320,8 @@ def release_create(name, chart_name, namespace='default',
         args += ['--values', values_file]
     return _cmd_and_result(
       'install', chart_name,
-      '--namespace', namespace, 
-      '--name', name,  
+      '--namespace', namespace,
+      '--name', name,
       *args, **kwargs
     )
 
@@ -349,13 +352,13 @@ def release_upgrade(name, chart_name, namespace='default',
       args += ['--values', values_file]
     return _cmd_and_result(
       'upgrade', name, chart_name,
-      '--namespace', namespace,  
+      '--namespace', namespace,
       *args, **kwargs
     )
 
 def install_chart_dependencies(chart_path, **kwargs):
   '''
-  Install the chart dependencies for the chart definition located at the 
+  Install the chart dependencies for the chart definition located at the
   specified chart_path.
 
   chart_path
@@ -377,5 +380,5 @@ def package(path, destination = None, **kwargs):
   args = []
   if destination:
     args += ["-d", destination]
-  
+
   return _cmd_and_result('package', path, *args, **kwargs)
